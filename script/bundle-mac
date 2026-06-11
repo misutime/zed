@@ -171,10 +171,10 @@ function download_git() {
 
     case "$architecture" in
         aarch64-apple-darwin)
-            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-arm64.tar.gz" bin/git ./git
+            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-arm64.tar.gz" ./bin/git ./git
             ;;
         x86_64-apple-darwin)
-            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-x64.tar.gz" bin/git ./git
+            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-x64.tar.gz" ./bin/git ./git
             ;;
         *)
             echo "Unsupported architecture: $architecture"
@@ -265,8 +265,10 @@ function sign_app_binaries() {
         rm ${dmg_source_directory}/Applications
 
         echo "Adding license agreement to DMG"
-        npm install --global dmg-license minimist
-        dmg-license script/terms/terms.json "${dmg_file_path}"
+        dmg_license_tools=$(mktemp -d)
+        npm install --prefix "$dmg_license_tools" dmg-license minimist
+        "$dmg_license_tools/node_modules/.bin/dmg-license" script/terms/terms.json "${dmg_file_path}"
+        rm -rf "$dmg_license_tools"
 
         if [[ $can_code_sign = true ]]; then
             echo "Notarizing DMG with Apple"
