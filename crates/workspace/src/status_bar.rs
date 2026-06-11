@@ -152,20 +152,14 @@ impl Render for StatusBar {
 impl StatusBar {
     fn render_left_tools(
         &self,
-        sidebar: &SidebarStatus,
+        _sidebar: &SidebarStatus,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        h_flex()
-            .gap_1()
-            .min_w_0()
-            .overflow_x_hidden()
-            .when(
-                sidebar.show_toggle && !sidebar.open && sidebar.side == SidebarSide::Left,
-                |this| this.child(self.render_sidebar_toggle(sidebar, cx)),
-            )
-            .children(self.left_items.iter().enumerate().map(|(index, item)| {
+        h_flex().gap_1().min_w_0().overflow_x_hidden().children(
+            self.left_items.iter().enumerate().map(|(index, item)| {
                 render_hideable_item("status-bar-left", index, item.as_ref(), cx)
-            }))
+            }),
+        )
     }
 
     fn render_right_tools(

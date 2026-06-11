@@ -2252,7 +2252,7 @@ impl Render for MultiWorkspace {
                                     let new_width = if sidebar_on_right {
                                         window.bounds().size.width - e.event.position.x
                                     } else {
-                                        e.event.position.x
+                                        e.event.position.x.max(SIDEBAR_RESIZE_HANDLE_SIZE)
                                     };
                                     sidebar.set_width(Some(new_width), cx);
                                 }

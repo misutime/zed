@@ -1,7 +1,10 @@
 use crate::focus_follows_mouse::FocusFollowsMouse as _;
 use crate::persistence::model::DockData;
 use crate::status_bar::HideStatusItem;
-use crate::{DraggedDock, Event, FocusFollowsMouse, ModalLayer, Pane, WorkspaceSettings};
+use crate::{
+    DraggedDock, Event, FocusFollowsMouse, ModalLayer, MultiWorkspace, Pane, SidebarSide,
+    ToggleWorkspaceSidebar, WorkspaceSettings, sidebar_side_context_menu,
+};
 use crate::{Workspace, status_bar::StatusItemView};
 use anyhow::Context as _;
 use client::proto;
@@ -17,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore, TerminalDockPosition};
 use std::sync::Arc;
 use ui::{
-    ContextMenu, CountBadge, Divider, DividerColor, IconButton, Tooltip, prelude::*,
+    ContextMenu, CountBadge, Divider, DividerColor, IconButton, Indicator, Tooltip, prelude::*,
     right_click_menu,
 };
 use util::ResultExt as _;
@@ -355,6 +358,7 @@ struct PanelEntry {
 
 pub struct PanelButtons {
     dock: Entity<Dock>,
+    multi_workspace: Option<WeakEntity<MultiWorkspace>>,
     _settings_subscription: Subscription,
 }
 
@@ -1198,11 +1202,20 @@ impl Render for Dock {
 }
 
 impl PanelButtons {
-    pub fn new(dock: Entity<Dock>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        dock: Entity<Dock>,
+        multi_workspace: Option<WeakEntity<MultiWorkspace>>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.observe(&dock, |_, _, cx| cx.notify()).detach();
+        if let Some(multi_workspace) = multi_workspace.as_ref().and_then(|mw| mw.upgrade()) {
+            cx.observe(&multi_workspace, |_, _, cx| cx.notify())
+                .detach();
+        }
         let settings_subscription = cx.observe_global::<SettingsStore>(|_, cx| cx.notify());
         Self {
             dock,
+            multi_workspace,
             _settings_subscription: settings_subscription,
         }
     }
@@ -1355,7 +1368,14 @@ impl Render for PanelButtons {
                             // Include active state in element ID to invalidate the cached
                             // tooltip when panel state changes (e.g., via keyboard shortcut)
                             let button = IconButton::new((name, is_active_button as u64), icon)
-                                .icon_size(IconSize::Small)
+                                .icon_size(if dock_position == DockPosition::Left {
+                                    IconSize::Medium
+                                } else {
+                                    IconSize::Small
+                                })
+                                .when(dock_position == DockPosition::Left, |this| {
+                                    this.size(ButtonSize::Large).width(px(40.))
+                                })
                                 .toggle_state(is_active_button)
                                 .on_click({
                                     let action = action.boxed_clone();
@@ -1377,10 +1397,14 @@ impl Render for PanelButtons {
                                     .and_then(|label| label.parse::<usize>().ok()),
                                 |this, count| this.child(CountBadge::new(count)),
                             )
-                        }),
+                        })
+                        .into_any_element(),
                 )
             })
             .collect();
+        let dock_is_bottom_or_right =
+            dock.position == DockPosition::Bottom || dock.position == DockPosition::Right;
+        let _ = dock;
 
         if dock_position == DockPosition::Right {
             buttons.reverse();
@@ -1388,18 +1412,94 @@ impl Render for PanelButtons {
 
         let has_buttons = !buttons.is_empty();
 
+        if dock_position == DockPosition::Left {
+            let threads_sidebar_button = self.render_threads_sidebar_button(window, cx);
+
+            return v_flex()
+                .id("left-dock-activity-bar")
+                .h_full()
+                .w(px(48.))
+                .flex_none()
+                .items_center()
+                .justify_between()
+                .py_1()
+                .bg(cx.theme().colors().panel_background)
+                .border_r_1()
+                .border_color(cx.theme().colors().border)
+                .child(v_flex().items_center().gap_0p5().children(buttons))
+                .child(
+                    v_flex()
+                        .items_center()
+                        .gap_0p5()
+                        .children(threads_sidebar_button),
+                )
+                .into_any_element();
+        }
+
         h_flex()
             .gap_1()
-            .when(
-                has_buttons
-                    && (dock.position == DockPosition::Bottom
-                        || dock.position == DockPosition::Right),
-                |this| this.child(Divider::vertical().color(DividerColor::Border)),
-            )
-            .children(buttons)
-            .when(has_buttons && dock.position == DockPosition::Left, |this| {
+            .when(has_buttons && dock_is_bottom_or_right, |this| {
                 this.child(Divider::vertical().color(DividerColor::Border))
             })
+            .children(buttons)
+            .when(has_buttons && dock_position == DockPosition::Left, |this| {
+                this.child(Divider::vertical().color(DividerColor::Border))
+            })
+            .into_any_element()
+    }
+}
+
+impl PanelButtons {
+    fn render_threads_sidebar_button(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let multi_workspace = window
+            .root::<MultiWorkspace>()
+            .flatten()
+            .or_else(|| self.multi_workspace.as_ref()?.upgrade())?;
+        let multi_workspace = multi_workspace.read(cx);
+        if !multi_workspace.multi_workspace_enabled(cx)
+            || multi_workspace.sidebar_side(cx) != SidebarSide::Left
+        {
+            return None;
+        }
+
+        let is_open = multi_workspace.sidebar_open();
+        let has_notifications = multi_workspace.sidebar_has_notifications(cx);
+        let indicator_border = cx.theme().colors().panel_background;
+
+        Some(
+            sidebar_side_context_menu("threads-sidebar-activity-button-menu", cx)
+                .anchor(Anchor::BottomLeft)
+                .attach(Anchor::TopLeft)
+                .trigger(move |_is_active, _window, _cx| {
+                    IconButton::new(
+                        ("toggle-workspace-sidebar", is_open as u64),
+                        IconName::ThreadsSidebarLeftClosed,
+                    )
+                    .icon_size(IconSize::Medium)
+                    .size(ButtonSize::Large)
+                    .width(px(40.))
+                    .toggle_state(is_open)
+                    .when(has_notifications, |this| {
+                        this.indicator(Indicator::dot().color(Color::Accent))
+                            .indicator_border_color(Some(indicator_border))
+                    })
+                    .tooltip(move |_, cx| {
+                        Tooltip::for_action("Toggle Threads Sidebar", &ToggleWorkspaceSidebar, cx)
+                    })
+                    .on_click(move |_, window, cx| {
+                        if let Some(multi_workspace) = window.root::<MultiWorkspace>().flatten() {
+                            multi_workspace.update(cx, |multi_workspace, cx| {
+                                multi_workspace.toggle_sidebar(window, cx);
+                            });
+                        }
+                    })
+                })
+                .into_any_element(),
+        )
     }
 }
 

@@ -1362,6 +1362,7 @@ pub struct Workspace {
     left_dock: Entity<Dock>,
     bottom_dock: Entity<Dock>,
     right_dock: Entity<Dock>,
+    left_dock_buttons: Entity<PanelButtons>,
     panes: Vec<Entity<Pane>>,
     panes_by_item: HashMap<EntityId, WeakEntity<Pane>>,
     active_pane: Entity<Pane>,
@@ -1724,17 +1725,17 @@ impl Workspace {
         let left_dock = Dock::new(DockPosition::Left, modal_layer.clone(), window, cx);
         let bottom_dock = Dock::new(DockPosition::Bottom, modal_layer.clone(), window, cx);
         let right_dock = Dock::new(DockPosition::Right, modal_layer.clone(), window, cx);
-        let left_dock_buttons = cx.new(|cx| PanelButtons::new(left_dock.clone(), cx));
-        let bottom_dock_buttons = cx.new(|cx| PanelButtons::new(bottom_dock.clone(), cx));
-        let right_dock_buttons = cx.new(|cx| PanelButtons::new(right_dock.clone(), cx));
         let multi_workspace = window
             .root::<MultiWorkspace>()
             .flatten()
             .map(|mw| mw.downgrade());
+        let left_dock_buttons =
+            cx.new(|cx| PanelButtons::new(left_dock.clone(), multi_workspace.clone(), cx));
+        let bottom_dock_buttons = cx.new(|cx| PanelButtons::new(bottom_dock.clone(), None, cx));
+        let right_dock_buttons = cx.new(|cx| PanelButtons::new(right_dock.clone(), None, cx));
         let status_bar = cx.new(|cx| {
             let mut status_bar =
                 StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx);
-            status_bar.add_left_item(left_dock_buttons, window, cx);
             status_bar.add_right_item(right_dock_buttons, window, cx);
             status_bar.add_right_item(bottom_dock_buttons, window, cx);
             status_bar
@@ -1823,6 +1824,7 @@ impl Workspace {
             left_dock,
             bottom_dock,
             right_dock,
+            left_dock_buttons,
             _panels_task: None,
             project: project.clone(),
             follower_states: Default::default(),
@@ -7959,6 +7961,7 @@ impl Workspace {
         if self.zoomed_position == Some(position) {
             return None;
         }
+        let dock_entity = dock.clone();
 
         let leader_border = dock.read(cx).active_panel().and_then(|panel| {
             let pane = panel.pane(cx)?;
@@ -7970,7 +7973,6 @@ impl Workspace {
             .flex()
             .overflow_hidden()
             .flex_none()
-            .child(dock.clone())
             .children(leader_border);
 
         // Apply sizing only when the dock is open. When closed the dock is still
@@ -7999,7 +8001,11 @@ impl Workspace {
                     let size = size_state
                         .and_then(|state| state.size)
                         .unwrap_or_else(|| panel.default_size(window, cx));
-                    container = container.w(size);
+                    container = container.w(if position == DockPosition::Left {
+                        size + px(48.)
+                    } else {
+                        size
+                    });
                     // Allow the fixed-width dock to shrink when there isn't
                     // enough space (e.g. when the sidebar is open). The
                     // stored size is preserved so the dock expands back
@@ -8017,6 +8023,14 @@ impl Workspace {
                 container = container.h(size);
             }
         }
+
+        container = if position == DockPosition::Left {
+            container
+                .child(self.left_dock_buttons.clone())
+                .child(dock_entity)
+        } else {
+            container.child(dock_entity)
+        };
 
         Some(container)
     }
