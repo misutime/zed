@@ -2162,11 +2162,12 @@ impl Render for MultiWorkspace {
             None
         };
 
-        let (left_sidebar, right_sidebar) = if sidebar_on_right {
-            (None, sidebar)
-        } else {
-            (sidebar, None)
-        };
+        let (left_sidebar, right_sidebar): (Option<AnyElement>, Option<AnyElement>) =
+            if sidebar_on_right {
+                (None::<AnyElement>, sidebar)
+            } else {
+                (sidebar, None::<AnyElement>)
+            };
 
         let ui_font = theme_settings::setup_ui_font(window, cx);
         let text_color = cx.theme().colors().text;

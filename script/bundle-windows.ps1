@@ -64,6 +64,27 @@ function Get-VsDevShellPath {
     throw "Could not find Visual Studio DevShell. Install Visual Studio 2026/2022 with C++ build tools."
 }
 
+function Get-InnoSetupCompilerPath {
+    $command = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $candidates = @(
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        "C:\Program Files\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    throw "Could not find Inno Setup compiler ISCC.exe. Install it with: winget install --id JRSoftware.InnoSetup --exact"
+}
+
 Push-Location
 $vsDevShellPath = Get-VsDevShellPath
 Write-Output "Using Visual Studio DevShell: $vsDevShellPath"
@@ -338,10 +359,7 @@ function BuildInstaller {
         }
     }
 
-    # Windows runner 2022 default has iscc in PATH, https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md
-    # Currently, we are using Windows 2022 runner.
-    # Windows runner 2025 doesn't have iscc in PATH for now, https://github.com/actions/runner-images/issues/11228
-    $innoSetupPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    $innoSetupPath = Get-InnoSetupCompilerPath
 
     $definitions = @{
         "AppId"          = $appId

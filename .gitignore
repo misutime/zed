@@ -33,12 +33,18 @@
 /node_modules/
 /plugins/bin
 /script/node_modules
+/script/zed_i18n/*.egg-info/
 /snap
 /zed.xcworkspace
 DerivedData/
 Packages
 xcuserdata/
 crates/docs_preprocessor/actions.json
+
+# Local zh-CN i18n generated reports
+/i18n/reports/*
+!/i18n/reports/README.md
+/i18n/dist/
 
 # Don't commit any secrets to the repo.
 .env

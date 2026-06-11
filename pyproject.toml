@@ -1,0 +1,22 @@
+[project]
+name = "zed-local-i18n"
+version = "0.1.0"
+description = "Local zh-CN localization tools for this Zed fork."
+requires-python = ">=3.12"
+dependencies = [
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-rust>=0.24,<0.25",
+]
+
+[project.scripts]
+zed-i18n = "tools.zed_i18n.local_cli:main"
+
+[tool.uv]
+package = true
+
+[tool.setuptools.package-dir]
+"" = "script/zed_i18n"
+
+[tool.setuptools.packages.find]
+where = ["script/zed_i18n"]
+include = ["tools*"]
